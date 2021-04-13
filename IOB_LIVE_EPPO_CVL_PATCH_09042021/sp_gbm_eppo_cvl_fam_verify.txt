@@ -1,0 +1,403 @@
+CREATE OR REPLACE PROCEDURE GBM.SP_GBM_EPPO_CVL_FAM_VERIFY (
+   file_name_in       IN       VARCHAR2,
+   ppo_no_in          IN       VARCHAR2,
+   pp_acct_num_in     IN       VARCHAR2,
+   sol_id_in          IN       VARCHAR2,
+   user_id_in         IN       VARCHAR2,
+   message_code_out   OUT      VARCHAR2
+)
+AS
+   TYPE familycursor IS REF CURSOR;
+
+   famcur                familycursor;
+   familydateofbirth_l   gbm_eppo_cvl_bklet_fm_details.familydateofbirth%TYPE;
+   familynationality_l   gbm_eppo_cvl_bklet_fm_details.familynationality%TYPE;
+   fm_name_l             gbm_eppo_cvl_bklet_fm_details.fm_name%TYPE;
+   isdisabled_l          gbm_eppo_cvl_bklet_fm_details.isdisabled%TYPE;
+   maritalstatus_l       gbm_eppo_cvl_bklet_fm_details.maritalstatus%TYPE;
+   relationshipdesc_l    gbm_eppo_cvl_bklet_fm_details.relationshipdesc%TYPE;
+   relationshipdesc_t    gbm_eppo_cvl_bklet_fm_details.relationshipdesc%TYPE;
+   bp_start_date_l       gbm_eppo_cvl_details.bp_start_date%TYPE;
+   date_death_l          gbm_eppo_cvl_details.date_death%TYPE;
+   frm_orfp_l            gbm_eppo_cvl_details.frm_orfp%TYPE;
+   pp_type_l             gbm_eppo_cvl_details.pp_type%TYPE;
+   sol_date_l            DATE;
+   err_msg               LONG;
+   fam_title_l           VARCHAR2 (10);
+   fam_id_l              NUMBER                                          := 0;
+   preference_l          NUMBER                                          := 0;
+   family_id_l           VARCHAR2 (15);
+   age_l                 NUMBER                                          := 0;
+   relation_code_l       gbm_pp_family_details.relation_with_pensioner%TYPE;
+   title_code_l          gbm_pp_family_details.title_code%TYPE;
+   book_relationship_l   gbm_eppo_cvl_booklet_details.relationship%TYPE;
+   book_fpname_l         gbm_eppo_cvl_booklet_details.fpname%TYPE;
+   accountno_l           gbm_eppo_cvl_booklet_details.accountno%TYPE;
+   cnt_bklet_l           NUMBER;
+   fm_cnt_l              NUMBER;
+   pen_account_no_l      VARCHAR2 (20);
+   addr_1_l              gbm_eppo_cvl_details.addr_1%TYPE;
+   addr_2_l              gbm_eppo_cvl_details.addr_2%TYPE;
+   addr_3_l              gbm_eppo_cvl_details.addr_3%TYPE;
+   state_code_l          gbm_eppo_cvl_details.state_code%TYPE;
+   pen_pin_l             gbm_eppo_cvl_details.pen_pin%TYPE;
+   cnt_l                 NUMBER;
+   pen_name_l            gbm_eppo_cvl_details.pen_name%TYPE;
+   rel_l                 VARCHAR2 (10);
+   pensioner_dob_l       gbm_eppo_cvl_details.pensioner_dob%TYPE;
+BEGIN
+   SELECT TO_DATE (TO_CHAR (fn_getsoldate, 'DD/MM/YYYY'), 'DD/MM/YYYY')
+     INTO sol_date_l
+     FROM DUAL;
+
+   OPEN famcur FOR
+      SELECT familydateofbirth, familynationality, fm_name, isdisabled,
+             maritalstatus, relationshipdesc
+        FROM gbm_eppo_cvl_bklet_fm_details
+       WHERE file_name = file_name_in
+          OR file_name = REPLACE (file_name_in, 'N', 'F');
+
+   SELECT bp_start_date, date_death, frm_orfp, pp_type,
+          pen_account_no, addr_1, addr_2, addr_3, state_code,
+          pen_pin, pen_name, pensioner_dob
+     INTO bp_start_date_l, date_death_l, frm_orfp_l, pp_type_l,
+          pen_account_no_l, addr_1_l, addr_2_l, addr_3_l, state_code_l,
+          pen_pin_l, pen_name_l, pensioner_dob_l
+     FROM gbm_eppo_cvl_details
+    WHERE pp_acct_num = pp_acct_num_in;
+
+   SELECT COUNT (*)
+     INTO cnt_bklet_l
+     FROM gbm_eppo_cvl_booklet_details
+    WHERE ppono = ppo_no_in;
+
+   SELECT COUNT (*)
+     INTO fm_cnt_l
+     FROM gbm_eppo_cvl_bklet_fm_details
+    WHERE file_name = file_name_in
+       OR file_name = REPLACE (file_name_in, 'N', 'F');
+
+   IF (cnt_bklet_l > 0)
+   THEN
+      SELECT UPPER (relationship), UPPER (fpname), accountno
+        INTO book_relationship_l, book_fpname_l, accountno_l
+        FROM gbm_eppo_cvl_booklet_details
+       WHERE ppono = ppo_no_in;
+   END IF;
+
+   IF (fm_cnt_l = 1)
+   THEN
+      SELECT relationshipdesc, fm_name
+        INTO book_relationship_l, book_fpname_l
+        FROM gbm_eppo_cvl_bklet_fm_details
+       WHERE file_name = file_name_in
+          OR file_name = REPLACE (file_name_in, 'N', 'F');
+   END IF;
+
+   IF (accountno_l IS NOT NULL AND pen_account_no_l IS NOT NULL)
+   THEN
+      IF (pen_account_no_l <> accountno_l)
+      THEN
+         pen_account_no_l := accountno_l;
+      END IF;
+   END IF;
+
+   err_msg := 'Error while getting spouse relationship code';
+
+   LOOP
+      FETCH famcur
+       INTO familydateofbirth_l, familynationality_l, fm_name_l,
+            isdisabled_l, maritalstatus_l, relationshipdesc_l;
+
+      EXIT WHEN famcur%NOTFOUND;
+
+      IF (   UPPER (relationshipdesc_l) = 'WIFE'
+          OR UPPER (relationshipdesc_l) = 'HUSBAND'
+         )
+      THEN
+         relationshipdesc_t := 'Spouse';
+      END IF;
+
+      IF (   UPPER (relationshipdesc_l) = 'WIFE'
+          OR UPPER (relationshipdesc_l) = 'HUSBAND'
+         )
+      THEN
+         SELECT sub_code
+           INTO relation_code_l
+           FROM gbm_sub_code_master
+          WHERE code = '020' AND sub_code_desc = relationshipdesc_t;
+      ELSE
+         SELECT sub_code
+           INTO relation_code_l
+           FROM gbm_sub_code_master
+          WHERE code = '020' AND sub_code_desc = relationshipdesc_l;
+      END IF;
+
+      /*SELECT sub_code
+        INTO title_code_l
+        FROM gbm_sub_code_master
+       WHERE code = '056' AND SUB_CODE_DESC = RELATIONSHIPDESC_L;*/
+      --title_code_l := 'T002';
+
+      -- since not relationsihip in new xml so hard coded
+      IF (relationshipdesc_l IS NOT NULL)
+      THEN
+         IF (UPPER (relationshipdesc_l) = 'WIFE')
+         THEN
+            title_code_l := 'T003';
+         ELSIF (UPPER (relationshipdesc_l) = 'HUSBAND')
+         THEN
+            title_code_l := 'T001';
+         ELSIF (UPPER (relationshipdesc_l) = 'SON')
+         THEN
+            title_code_l := 'T001';
+         ELSIF (UPPER (relationshipdesc_l) = 'DAUGHTER')
+         THEN
+            title_code_l := 'T002';
+         END IF;
+
+               /*
+                  IF (UPPER (relationshipdesc_l) = 'WIFE')
+                  THEN
+                     fam_title_l := 'Mrs/Dr';
+                  ELSE
+                     IF (UPPER (relationshipdesc_l) = 'DAUGHTER')
+                     THEN
+                        fam_title_l := 'Miss';
+                     ELSE
+                        IF (UPPER (relationshipdesc_l) = 'SON')
+                        THEN
+                           fam_title_l := 'Mr/Dr';
+                        END IF;
+                     END IF;
+                  END IF;
+         */
+         fam_id_l := fam_id_l + 1;
+         --preference_l := preference_l + 1;
+         family_id_l := pp_acct_num_in || 'F' || fam_id_l;
+
+         SELECT FLOOR (  ROUND (MONTHS_BETWEEN (fn_getsoldate,
+                                                TO_DATE (familydateofbirth_l,
+                                                         'DD/MM/YYYY'
+                                                        )
+                                               )
+                               )
+                       / 12
+                      )
+           INTO age_l
+           FROM DUAL;
+
+         IF (pp_type_l = '0041')
+         THEN
+            preference_l := preference_l + 1;
+
+            INSERT INTO gbm_pp_family_details
+                        (pp_acct_num, first_name, middle_name, last_name,
+                         relation_with_pensioner,
+                         dob, guardian_details,
+                         preference, remarks, is_active, is_deleted,
+                         verified_status, created_date, created_by,
+                         opr_acct_num, salary, sal_eff_date, age,
+                         title_code, fp_phone, fp_email, last_mod_by,
+                         last_mod_date, family_id, fam_address,
+                         fp_district, fp_pin, fp_state
+                        )
+                 VALUES (pp_acct_num_in, fm_name_l, '', '',
+                         relation_code_l,
+                         TO_DATE (familydateofbirth_l, 'DD/MM/YYYY'), '',
+                         preference_l, '', 'N', 'N',
+                         'Y', fn_getsoldate, 'SYSTEM',
+                         pen_account_no_l, NULL, NULL, age_l,
+                         title_code_l, '', '', user_id_in,
+                         SYSDATE, family_id_l, addr_1_l || ' ' || addr_2_l,
+                         addr_3_l, pen_pin_l, state_code_l
+                        );
+         ELSE
+            preference_l := preference_l + 1;
+
+            IF (    UPPER (relationshipdesc_l) = UPPER (book_relationship_l)
+                AND UPPER (fm_name_l) = UPPER (book_fpname_l)
+               )
+            THEN
+               INSERT INTO gbm_pp_family_details
+                           (pp_acct_num, first_name, middle_name, last_name,
+                            relation_with_pensioner,
+                            dob,
+                            pp_start_date, guardian_details, preference,
+                            remarks, is_active, is_deleted, verified_status,
+                            created_date, created_by, opr_acct_num, salary,
+                            sal_eff_date, age, title_code, fp_phone,
+                            fp_email, last_mod_by, last_mod_date, family_id
+                           )
+                    VALUES (pp_acct_num_in, fm_name_l, '', '',
+                            relation_code_l,
+                            TO_DATE (familydateofbirth_l, 'DD/MM/YYYY'),
+                            (date_death_l + 1
+                            ), '', 0,
+                            '', 'Y', 'N', 'Y',
+                            fn_getsoldate, 'SYSTEM', pen_account_no_l, NULL,
+                            NULL, age_l, title_code_l, '',
+                            '', user_id_in, SYSDATE, family_id_l
+                           );
+            ELSE
+               INSERT INTO gbm_pp_family_details
+                           (pp_acct_num, first_name, middle_name, last_name,
+                            relation_with_pensioner,
+                            dob, guardian_details,
+                            preference, remarks, is_active, is_deleted,
+                            verified_status, created_date, created_by,
+                            opr_acct_num, salary, sal_eff_date, age,
+                            title_code, fp_phone, fp_email, last_mod_by,
+                            last_mod_date, family_id
+                           )
+                    VALUES (pp_acct_num_in, fm_name_l, '', '',
+                            relation_code_l,
+                            TO_DATE (familydateofbirth_l, 'DD/MM/YYYY'), '',
+                            preference_l, '', 'N', 'N',
+                            'Y', fn_getsoldate, 'SYSTEM',
+                            '', NULL, NULL, age_l,
+                            title_code_l, '', '', user_id_in,
+                            SYSDATE, family_id_l
+                           );
+            END IF;
+         END IF;
+
+         INSERT INTO gbm_unverified_operations
+                     (sol_id, sch_code, operation_id, operation,
+                      is_tran_financial, verified_status, entered_date
+                     )
+              VALUES (sol_id_in, '0003', family_id_l, 'A',
+                      'N', 'Y', SYSDATE
+                     );
+      /*UPDATE gbm_pp_family_details
+         SET aadhaar_no = spouse_aadhar_l,
+             nationality = jn_spouse_nationality_l
+       WHERE pp_acct_num = pp_acct_num_in AND family_id = family_id_l;*/
+      END IF;
+   END LOOP;
+
+   COMMIT;
+
+   SELECT COUNT (1)
+     INTO cnt_l
+     FROM gbm_pp_family_details
+    WHERE pp_acct_num = pp_acct_num_in;
+
+   IF (cnt_l = 0)
+   THEN
+      IF (pp_type_l = '0042')
+      THEN
+         SELECT SUBSTR (pen_name, 1, (INSTR (pen_name, ' ') - 1))
+           INTO rel_l
+           FROM gbm_eppo_cvl_details
+          WHERE file_name = file_name_in;
+
+         IF (   rel_l = 'Mr'
+             OR rel_l = 'MR'
+             OR rel_l = 'Shri'
+             OR rel_l = 'SHRI'
+             OR rel_l = 'Mrs'
+             OR rel_l = 'MRS'
+             OR rel_l = 'Smt'
+             OR rel_l = 'SMT'
+            )
+         THEN
+            relation_code_l := '0100';
+         ELSIF (rel_l = 'Master' OR rel_l = 'MASTER')
+         THEN
+            relation_code_l := '0098';
+         ELSIF (rel_l = 'Miss' OR rel_l = 'MISS')
+         THEN
+            relation_code_l := '0099';
+         END IF;
+        if (relation_code_l is null)
+        then
+            relation_code_l := '0100';
+        end if;
+
+         IF (rel_l = 'Mr' OR rel_l = 'MR' OR rel_l = 'Shri' OR rel_l = 'SHRI'
+            )
+         THEN
+            title_code_l := 'T001';
+         ELSIF (rel_l = 'Mrs' OR rel_l = 'MRS' OR rel_l = 'Smt'
+                OR rel_l = 'SMT'
+               )
+         THEN
+            title_code_l := 'T003';
+         ELSIF (rel_l = 'Master' OR rel_l = 'MASTER')
+         THEN
+            title_code_l := 'T004';
+         ELSIF (rel_l = 'Miss' OR rel_l = 'MISS')
+         THEN
+            title_code_l := 'T002';
+         END IF;
+
+         SELECT FLOOR (  ROUND (MONTHS_BETWEEN (fn_getsoldate,
+                                                TO_DATE (pensioner_dob_l,
+                                                         'DD/MM/YYYY'
+                                                        )
+                                               )
+                               )
+                       / 12
+                      )
+           INTO age_l
+           FROM DUAL;
+
+         family_id_l := pp_acct_num_in || 'F' || 1;
+
+         INSERT INTO gbm_pp_family_details
+                     (pp_acct_num, first_name, middle_name, last_name,
+                      relation_with_pensioner,
+                      dob,
+                      pp_start_date, guardian_details, preference, remarks,
+                      is_active, is_deleted, verified_status, created_date,
+                      created_by, opr_acct_num, salary, sal_eff_date, age,
+                      title_code, fp_phone, fp_email, last_mod_by,
+                      last_mod_date, family_id
+                     )
+              VALUES (pp_acct_num_in, pen_name_l, '', '',
+                      relation_code_l,
+                      TO_DATE (pensioner_dob_l, 'DD/MM/YYYY'),
+                      (date_death_l + 1
+                      ), '', 0, '',
+                      'Y', 'N', 'Y', fn_getsoldate,
+                      'SYSTEM', pen_account_no_l, NULL, NULL, age_l,
+                      title_code_l, '', '', user_id_in,
+                      SYSDATE, family_id_l
+                     );
+
+         COMMIT;
+      END IF;
+   END IF;
+
+   message_code_out := 'SUCCESS';
+EXCEPTION
+   WHEN NO_DATA_FOUND
+   THEN
+      message_code_out := 'M0000010';
+      message_code_out := 'No Records Found';
+   WHEN TOO_MANY_ROWS
+   THEN
+      message_code_out := 'M0000011';
+      DBMS_OUTPUT.put_line ('Exception Too Many Rows - ');
+      message_code_out := 'Exception Too Many Rows - ';
+   WHEN DUP_VAL_ON_INDEX
+   THEN
+      message_code_out := 'M0000012';
+      DBMS_OUTPUT.put_line ('dup_val_on_index - ');
+   WHEN INVALID_CURSOR
+   THEN
+      DBMS_OUTPUT.put_line ('invalid_cursor  ');
+   WHEN INVALID_NUMBER
+   THEN
+      DBMS_OUTPUT.put_line ('invalid_number - ');
+   WHEN OTHERS
+   THEN
+      err_msg := err_msg || SQLERRM;
+      message_code_out := 'FAILURE';
+      DBMS_OUTPUT.put_line ('Error ' || SQLERRM);
+      --result_out := 0;
+      DBMS_OUTPUT.put_line ('No Records Found');
+      ROLLBACK;
+END;
+/

@@ -1,0 +1,39 @@
+SET lines 2000;
+SET pages 0;
+SET COLSEP '|';
+
+SPOOL SEL_EPPO_DET_OP.lst;
+
+SELECT *
+FROM gbm_eppo_cvl_details
+WHERE file_name = 'N1247458-20210115.xml';
+
+SELECT *
+FROM gbm_eppo_cvl_master
+WHERE file_name = 'N1247458-20210115.xml';
+
+SELECT *
+FROM gbm_eppo_cvl_commgra_details
+WHERE xml_file_name = 'N1247458-20210115.xml';
+
+SELECT *
+FROM gbm_eppo_cvl_component_details
+WHERE xml_file_name = 'N1247458-20210115.xml';
+
+SELECT *
+FROM gbm_eppo_cvl_history
+WHERE file_name = 'N1247458-20210115.xml';
+
+SELECT *
+FROM gbm_eppo_cvl_errlog
+WHERE file_name = 'N1247458-20210115.xml';
+
+SELECT *
+FROM gbm_eppo_cvl_bklet_fm_details
+WHERE file_name = 'N1247458-20210115.xml';
+
+SELECT *
+FROM gbm_eppo_cvl_booklet_details
+WHERE file_name = 'N1247458-20210115.xml';
+
+SPOOL OFF;

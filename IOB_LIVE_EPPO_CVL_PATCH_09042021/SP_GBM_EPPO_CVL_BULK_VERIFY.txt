@@ -1,0 +1,1033 @@
+create or replace PROCEDURE sp_gbm_eppo_cvl_bulk_verify (
+   /*****************************************************************************************
+    PROCEDURE NAME     :SP_GBM_EPPO_CVL_BULK_VERIFY
+    CREATED BY        :VIJAYANAND G
+    CREATED DATE     :04-07-2018
+    PURPOSE         :MOVING FROM STAGING TABLE TO MAIN TABLE AFTER VERIFIED.
+    FILE NAME      :SP_GBM_EPPO_CVL_BULK_VERIFY.SQL
+   *****************************************************************************************/
+   file_name_in       IN       VARCHAR2,
+   ppo_no_in          IN       VARCHAR2,
+   user_id_in         IN       VARCHAR2,
+   message_code_out   OUT      VARCHAR2
+)
+AS
+   sol_date_l                DATE;
+   sol_id_l                  gbm_eppo_cvl_details.sol_id%TYPE;
+   pp_acct_num_l             gbm_eppo_cvl_details.pp_acct_num%TYPE;
+   pen_account_no_l          gbm_eppo_cvl_details.pen_account_no%TYPE;
+   pen_name_l                gbm_eppo_cvl_details.pen_name%TYPE;
+   addr_1_l                  gbm_eppo_cvl_details.addr_1%TYPE;
+   pp_category_l             gbm_eppo_cvl_details.pp_category%TYPE;
+   pp_type_l                 gbm_eppo_cvl_details.pp_type%TYPE;
+   bp_start_date_l           gbm_eppo_cvl_details.bp_start_date%TYPE;
+   date_ret_l                gbm_eppo_cvl_details.date_ret%TYPE;
+   date_death_l              gbm_eppo_cvl_details.date_death%TYPE;
+   pen_pan_no_l              gbm_eppo_cvl_details.pen_pan_no%TYPE;
+   tr_code_l                 gbm_eppo_cvl_details.tr_code%TYPE;
+   pensioner_dob_l           gbm_eppo_cvl_details.pensioner_dob%TYPE;
+   type_code_l               gbm_eppo_cvl_details.type_code%TYPE;
+   pen_phone_l               gbm_eppo_cvl_details.pen_phone%TYPE;
+   gender_l                  gbm_eppo_cvl_details.gender%TYPE;
+   pao_name_l                gbm_eppo_cvl_details.pao_name%TYPE;
+   addr_2_l                  gbm_eppo_cvl_details.addr_2%TYPE;
+   addr_3_l                  gbm_eppo_cvl_details.addr_3%TYPE;
+   title_l                   gbm_eppo_cvl_details.title%TYPE;
+   title_tmp                 gbm_eppo_cvl_details.title%TYPE;
+   pao_code_l                gbm_eppo_cvl_details.pao_code%TYPE;
+   bnk_pay_code_l            gbm_eppo_cvl_details.bnk_pay_code%TYPE;
+   permanentdistrict_l       gbm_eppo_cvl_booklet_details.permanentdistrict%TYPE;
+   pen_pin_l                 gbm_eppo_cvl_details.pen_pin%TYPE;
+   permanentstate_l          gbm_eppo_cvl_booklet_details.permanentstate%TYPE;
+   nationality_l             gbm_eppo_cvl_booklet_details.nationality%TYPE;
+   pen_email_l               gbm_eppo_cvl_details.pen_email%TYPE;
+   joiningdate_l             gbm_eppo_cvl_booklet_details.joiningdate%TYPE;
+   net_qual_service_l        gbm_eppo_cvl_details.net_qual_service%TYPE;
+   payscale_l                gbm_eppo_cvl_booklet_details.payscale%TYPE;
+   pay_commission_l          gbm_eppo_cvl_details.pay_commission%TYPE;
+   submajorhead_l            gbm_eppo_cvl_booklet_details.submajorhead%TYPE;
+   minorhead_l               gbm_eppo_cvl_booklet_details.minorhead%TYPE;
+   votedcharged_l            gbm_eppo_cvl_booklet_details.votedcharged%TYPE;
+   arrears_l                 gbm_eppo_cvl_booklet_details.arrears%TYPE;
+   arrear_from_l             gbm_eppo_cvl_booklet_details.arrear_from%TYPE;
+   arrear_to_l               gbm_eppo_cvl_booklet_details.arrear_to%TYPE;
+   ais_code_l                gbm_eppo_cvl_details.ais_code%TYPE;
+   upto_enfp_l               gbm_eppo_cvl_details.upto_enfp%TYPE;
+   pen_adhaar_no_l           gbm_eppo_cvl_details.pen_adhaar_no%TYPE;
+   comm_amt_l                gbm_eppo_cvl_commgra_details.amt%TYPE;
+   comm_issue_date_l         gbm_eppo_cvl_commgra_details.pension_calc_date%TYPE;
+   da_eff_from_date_l        DATE;
+   date_of_receipt_l         DATE;
+   date_print_l              DATE;
+   frm_orfp_l                DATE;
+   err_msg                   LONG;
+   cnt_l                     NUMBER;
+   msg_code_out              VARCHAR2 (50);
+   fm_cnt_l                  NUMBER;
+   pen_mst_cnt_l             NUMBER;
+   pao_add1_l                gbm_eppo_cvl_details.pao_add1%TYPE;
+   pao_city_l                gbm_eppo_cvl_details.pao_city%TYPE;
+   pao_pin_l                 gbm_eppo_cvl_details.pao_city%TYPE;
+   diary_no_l                gbm_eppo_cvl_details.diary_no%TYPE;
+   ssa_no_l                  gbm_eppo_cvl_details.ssa_no%TYPE;
+   last_pay_drawn_l          gbm_eppo_cvl_details.last_pay_drawn%TYPE;
+   grade_pay_l               gbm_eppo_cvl_details.grade_pay%TYPE;
+   npa_l                     gbm_eppo_cvl_details.npa%TYPE;
+   death_in_harness_flag_l   gbm_eppo_cvl_details.death_in_harness_flag%TYPE;
+   cnt_comm_l                NUMBER;
+   title_len                 NUMBER;
+   pay_matrix_l              gbm_eppo_cvl_details.pay_matrix%TYPE;
+   pay_mat_ind               gbm_pp_master.pay_matrix_index%TYPE;
+   pay_mat_lev               gbm_pp_master.pay_matrix_level%TYPE;
+   gp_start_date_l     DATE;
+BEGIN
+   SELECT TO_DATE (TO_CHAR (fn_getsoldate, 'DD/MM/YYYY'), 'DD/MM/YYYY')
+     INTO sol_date_l
+     FROM DUAL;
+
+   DELETE FROM gbm_eppo_cvl_errlog
+         WHERE file_name = file_name_in;
+
+   COMMIT;
+
+   SELECT COUNT (*)
+     INTO cnt_l
+     FROM gbm_eppo_cvl_booklet_details
+    WHERE ppono = ppo_no_in;
+
+   SELECT pp_type
+     INTO pp_type_l
+     FROM gbm_eppo_cvl_details
+    WHERE ppo_num = ppo_no_in;
+
+   IF (cnt_l > 0)
+   THEN
+      IF (pp_type_l = '0042')
+      THEN
+         SELECT sol_id, pp_acct_num, pen_account_no, psname,
+                addr_1, pp_category, pp_type, (date_death + 1),
+                date_ret, date_death, pen_pan_no, tr_code,
+                --pensioner_dob, type_code, pen_phone, gecd.gender,
+                dateofbirth, type_code, pen_phone, gecd.gender,
+                pao_name, addr_2, addr_3, title,
+                permanentdistrict, pen_pin, state_code,
+                DECODE (nationality, 'INDIA', '1', '3'), pen_email,
+                joiningdate,
+                --NET_QUAL_SERVICE,
+                REGEXP_REPLACE (net_qual_service, '[^0-9]', ''), payscale,
+                pay_commission, submajorhead, minorhead,
+                DECODE (votedcharged, 'VOTED', '0', '1'), arrears,
+                arrear_from, arrear_to, SUBSTR (ais_code, 0, 3), upto_enfp,
+                pen_adhaar_no, frm_orfp, pao_add1, pao_city,
+                --PAO_PIN,
+                REGEXP_REPLACE (pao_pin, '[^0-9]', ''), diary_no, ssa_no,
+                --PEN_PIN,
+                --NET_QUAL_SERVICE,
+                last_pay_drawn, grade_pay, ais_code, gecd.npa,
+                death_in_harness_flag, pao_code, bnk_pay_code,
+                date_print, pay_matrix
+           INTO sol_id_l, pp_acct_num_l, pen_account_no_l, pen_name_l,
+                addr_1_l, pp_category_l, pp_type_l, bp_start_date_l,
+                date_ret_l, date_death_l, pen_pan_no_l, tr_code_l,
+                pensioner_dob_l, type_code_l, pen_phone_l, gender_l,
+                pao_name_l, addr_2_l, addr_3_l, title_l,
+                permanentdistrict_l, pen_pin_l, permanentstate_l,
+                nationality_l, pen_email_l,
+                joiningdate_l,
+                net_qual_service_l, payscale_l,
+                pay_commission_l, submajorhead_l, minorhead_l,
+                votedcharged_l, arrears_l,
+                arrear_from_l, arrear_to_l, ais_code_l, upto_enfp_l,
+                pen_adhaar_no_l, frm_orfp_l, pao_add1_l, pao_city_l,
+                pao_pin_l, diary_no_l, ssa_no_l,
+                --PEN_PIN_l,
+                --NET_QUAL_SERVICE_l,
+                last_pay_drawn_l, grade_pay_l, ais_code_l, npa_l,
+                death_in_harness_flag_l, pao_code_l, bnk_pay_code_l,
+                date_print_l, pay_matrix_l
+           FROM gbm_eppo_cvl_details gecd, gbm_eppo_cvl_booklet_details gecbd
+          WHERE gecd.ppo_num = gecbd.ppono
+            AND gecd.file_name = file_name_in
+            AND ppo_num = ppo_no_in;
+
+         IF (permanentdistrict_l IS NOT NULL)
+         THEN
+            IF (   (permanentdistrict_l LIKE '%N.A%')
+                OR (permanentdistrict_l LIKE 'N_')
+               )
+            THEN
+               permanentdistrict_l := addr_3_l;
+            END IF;
+         END IF;
+      ELSE
+         SELECT sol_id, pp_acct_num, pen_account_no, pen_name,
+                addr_1, pp_category, pp_type, bp_start_date,
+                date_ret, date_death, pen_pan_no, tr_code,
+                pensioner_dob, type_code, pen_phone, gecd.gender,
+                pao_name, addr_2, addr_3, title,
+                permanentdistrict, pen_pin, state_code,
+                DECODE (nationality, 'INDIA', '1', '3'), pen_email,
+                joiningdate,
+                --NET_QUAL_SERVICE,
+                REGEXP_REPLACE (net_qual_service, '[^0-9]', ''), payscale,
+                pay_commission, submajorhead, minorhead,
+                DECODE (votedcharged, 'VOTED', '0', '1'), arrears,
+                arrear_from, arrear_to, SUBSTR (ais_code, 0, 3), upto_enfp,
+                pen_adhaar_no, frm_orfp, pao_add1, pao_city,
+                --PAO_PIN,
+                REGEXP_REPLACE (pao_pin, '[^0-9]', ''), diary_no, ssa_no,
+                --PEN_PIN,
+                --NET_QUAL_SERVICE,
+                last_pay_drawn, grade_pay, ais_code, gecd.npa,
+                death_in_harness_flag, pao_code, bnk_pay_code,
+                date_print, pay_matrix
+           INTO sol_id_l, pp_acct_num_l, pen_account_no_l, pen_name_l,
+                addr_1_l, pp_category_l, pp_type_l, bp_start_date_l,
+                date_ret_l, date_death_l, pen_pan_no_l, tr_code_l,
+                pensioner_dob_l, type_code_l, pen_phone_l, gender_l,
+                pao_name_l, addr_2_l, addr_3_l, title_l,
+                permanentdistrict_l, pen_pin_l, permanentstate_l,
+                nationality_l, pen_email_l,
+                joiningdate_l,
+                net_qual_service_l, payscale_l,
+                pay_commission_l, submajorhead_l, minorhead_l,
+                votedcharged_l, arrears_l,
+                arrear_from_l, arrear_to_l, ais_code_l, upto_enfp_l,
+                pen_adhaar_no_l, frm_orfp_l, pao_add1_l, pao_city_l,
+                pao_pin_l, diary_no_l, ssa_no_l,
+                --PEN_PIN_l,
+                --NET_QUAL_SERVICE_l,
+                last_pay_drawn_l, grade_pay_l, ais_code_l, npa_l,
+                death_in_harness_flag_l, pao_code_l, bnk_pay_code_l,
+                date_print_l, pay_matrix_l
+           FROM gbm_eppo_cvl_details gecd, gbm_eppo_cvl_booklet_details gecbd
+          WHERE gecd.ppo_num = gecbd.ppono
+            AND gecd.file_name = file_name_in
+            AND ppo_num = ppo_no_in;
+
+         IF (permanentdistrict_l IS NOT NULL)
+         THEN
+            IF (   (permanentdistrict_l LIKE '%N.A%')
+                OR (permanentdistrict_l LIKE 'N_')
+               )
+            THEN
+               permanentdistrict_l := addr_3_l;
+            END IF;
+         END IF;
+      END IF;
+   ELSE
+      SELECT sol_id, pp_acct_num, pen_account_no, pen_name,
+             addr_1, pp_category, pp_type, bp_start_date,
+             date_ret, date_death, pen_pan_no, tr_code,
+             pensioner_dob, type_code, pen_phone, gender,
+             pao_name, addr_2, addr_3, title, pen_pin,
+             state_code, pen_email, pay_commission,
+             NVL (SUBSTR (ais_code, 0, 3), ''), upto_enfp, pen_adhaar_no,
+             frm_orfp, pao_add1, pao_city,
+             REGEXP_REPLACE (pao_pin, '[^0-9]', ''), diary_no, ssa_no,
+             REGEXP_REPLACE (net_qual_service, '[^0-9]', ''),
+             last_pay_drawn, grade_pay, npa, pao_code,
+             bnk_pay_code, date_print, pay_matrix, pay_scale_commison
+        INTO sol_id_l, pp_acct_num_l, pen_account_no_l, pen_name_l,
+             addr_1_l, pp_category_l, pp_type_l, bp_start_date_l,
+             date_ret_l, date_death_l, pen_pan_no_l, tr_code_l,
+             pensioner_dob_l, type_code_l, pen_phone_l, gender_l,
+             pao_name_l, addr_2_l, addr_3_l, title_l, pen_pin_l,
+             permanentstate_l, pen_email_l, pay_commission_l,
+             ais_code_l, upto_enfp_l, pen_adhaar_no_l,
+             frm_orfp_l, pao_add1_l, pao_city_l,
+             pao_pin_l, diary_no_l, ssa_no_l,
+             net_qual_service_l,
+             last_pay_drawn_l, grade_pay_l, npa_l, pao_code_l,
+             bnk_pay_code_l, date_print_l, pay_matrix_l, payscale_l
+        FROM gbm_eppo_cvl_details
+       WHERE file_name = file_name_in AND ppo_num = ppo_no_in;
+   END IF;
+
+   IF (permanentdistrict_l IS NULL)
+   THEN
+      permanentdistrict_l := addr_3_l;
+   END IF;
+
+/*
+   IF (pay_matrix_l IS NOT NULL)
+   THEN
+      SELECT SUBSTR (pay_matrix_l, 8, INSTR (pay_matrix_l, ',', 1, 1) - 8)
+        INTO pay_mat_lev
+        FROM gbm_eppo_cvl_details
+       WHERE file_name = file_name_in AND ppo_num = ppo_no_in;
+
+      SELECT SUBSTR (pay_matrix_l,
+                     INSTR (pay_matrix_l, ':', 1, 2) + 1,
+                       (INSTR (pay_matrix_l, ')', 1, 1)
+                       )
+                     - (INSTR (pay_matrix_l, ':', 1, 2) + 1)
+                    )
+        INTO pay_mat_ind
+        FROM gbm_eppo_cvl_details
+       WHERE file_name = file_name_in AND ppo_num = ppo_no_in;
+   END IF;
+*/
+   SELECT eff_from_date
+     INTO da_eff_from_date_l
+     FROM gbm_pp_da_master
+    WHERE pp_category = pp_category_l
+      AND pp_type = type_code_l
+      AND pp_treasury = tr_code_l
+      AND is_active = 'Y'
+      AND is_deleted = 'N'
+      AND pay_commission = pay_commission_l;
+
+   SELECT COUNT (*)
+     INTO cnt_comm_l
+     FROM gbm_eppo_cvl_commgra_details
+    WHERE xml_file_name = file_name_in AND TYPE = '0082';
+
+   SELECT upload_date
+     INTO date_of_receipt_l
+     FROM gbm_eppo_cvl_master
+    WHERE file_name = file_name_in AND upload_status = 'P'
+          AND is_deleted = 'N';
+
+   --date_of_receipt_l := sol_date_l;
+   IF (cnt_comm_l > 0)
+   THEN
+      SELECT pension_calc_date, amt
+        INTO comm_issue_date_l, comm_amt_l
+        FROM gbm_eppo_cvl_commgra_details
+       WHERE xml_file_name = file_name_in AND TYPE = '0082';
+   END IF;
+
+   IF (nationality_l IS NULL)
+   THEN
+      nationality_l := 1;
+   END IF;
+
+   IF (pp_type_l = '0041')
+   THEN
+      err_msg := 'Error while inserting into GBM_PP_MASTER - Superannuation';
+
+      INSERT INTO gbm_eppo_cvl_errlog
+                  (file_name, ppo_num, table_name, rec_id, sno, field_name,
+                   field_data, field_status, field_remarks, user_id
+                  )
+           VALUES (file_name_in, ppo_no_in, NULL, '1', NULL, NULL,
+                   NULL, 'E', err_msg, 'SYSTEM'
+                  );
+
+      err_msg := 'V';
+
+      IF (cnt_l > 0)
+      THEN
+         INSERT INTO gbm_pp_master
+                     (sol_id, ppo_num, pp_acct_num, opr_acct_num,
+                      first_name, middle_name, last_name, address,
+                      pp_category, pp_type, pp_start_date, retire_date,
+                      dod, death_cert_received_date, pan_no,
+                      conversion_date, created_by, created_date,
+                      verified_status, is_deleted, tr_code, dob,
+                      is_ex_gratia, overrides_trsy, type_code,
+                      --ph_number,
+                      mobile_number, gender, ppo_received_from, is_migrated,
+                      last_pension_payment_date, master_details_flag,
+                      non_cbs, address2, address3, last_da_eff_from_date,
+                      title_code, district, pincode,
+                      state_code, nationality, email_id,
+                      date_of_joining, net_qualifying_service, pay_scale,
+                      pay_commission, major_head_acct, minor_head,
+                      voted_charged, arrear_rate1, arrear_frm1, arrear_to1,
+                      ais_service_cadre, cust_id,
+                                                 -- IS_ABSORBTION_PENSION, --ENHANCED_PENSION_TO_DATE,
+                                                 aadhaar_no,
+                      commutation_amt, commutation_issue_date, pao_name,
+                      pao_address1, pao_city, pao_pin, dairy_number,
+                      ssa_number,
+                                 --PINCODE,
+                                 --NET_QUALIFYING_SERVICE,
+                                 last_pay_drawn, grade_pay,
+                      non_practising_allowance            --DEATH_HARNESS_FLAG
+                                              ,
+                      date_of_receipt_link_cell, branch_code,
+                      ssa_print_date, date_of_ppo
+                     )
+              VALUES (sol_id_l, ppo_no_in, pp_acct_num_l, pen_account_no_l,
+                      pen_name_l, NULL, NULL, addr_1_l,
+                      pp_category_l, pp_type_l, bp_start_date_l, date_ret_l,
+                      date_death_l, NULL, pen_pan_no_l,
+                      NULL, 'SYSTEM', sol_date_l,
+                      'N', 'N', tr_code_l, pensioner_dob_l,
+                      'N', 'N', type_code_l,
+                      pen_phone_l, gender_l, pao_name_l, 'N',
+                      NULL, 'N',
+                      'N', addr_2_l, addr_3_l, da_eff_from_date_l,
+                      title_l, permanentdistrict_l, pen_pin_l,
+                      permanentstate_l, nationality_l, pen_email_l,
+                      joiningdate_l, net_qual_service_l, payscale_l,
+                      pay_commission_l, submajorhead_l, minorhead_l,
+                      votedcharged_l, arrears_l, arrear_from_l, arrear_to_l,
+                      ais_code_l, NULL,
+                                       -- 'N',-- UPTO_ENFP_L,
+                                       pen_adhaar_no_l,
+                      comm_amt_l, comm_issue_date_l, pao_name_l,
+                      pao_add1_l, pao_city_l, pao_pin_l, diary_no_l,
+                      ssa_no_l,
+                               -- PEN_PIN_l,
+                               --NET_QUAL_SERVICE_l,
+                               last_pay_drawn_l, grade_pay_l,
+                      npa_l                          --DEATH_IN_HARNESS_FLAG_l
+                           ,
+                      date_of_receipt_l, bnk_pay_code_l,
+                      date_print_l, date_print_l
+                     );
+      ELSE
+         /*INSERT INTO newgpm_tmp2
+                     (sol_id, ppo_num, pp_acct_num, opr_acct_num,
+                      first_name, middle_name, last_name, address,
+                      pp_category, pp_type, pp_start_date, retire_date,
+                      dod, death_cert_received_date, pan_no,
+                      conversion_date, created_by, created_date,
+                      verified_status, is_deleted, tr_code, dob,
+                      is_ex_gratia, overrides_trsy, type_code,
+                      --ph_number,
+                      mobile_number, gender, ppo_received_from, is_migrated,
+                      last_pension_payment_date, master_details_flag,
+                      non_cbs, address2, address3, last_da_eff_from_date,
+                      title_code, district, pincode, state_code,
+                      nationality, email_id, date_of_joining,
+                      net_qualifying_service, pay_scale, pay_commission,
+                      major_head_acct, minor_head, voted_charged,
+                      arrear_rate1, arrear_frm1, arrear_to1,
+                      ais_service_cadre, cust_id,
+                                                 -- IS_ABSORBTION_PENSION, --ENHANCED_PENSION_TO_DATE,
+                                                 aadhaar_no,
+                      commutation_amt, commutation_issue_date, pao_name,
+                      pao_address1, pao_city, pao_pin, dairy_number,
+                      ssa_number,
+                                 --PINCODE,
+                                 --NET_QUALIFYING_SERVICE,
+                                 last_pay_drawn, grade_pay,
+                      non_practising_allowance, death_harness_flag
+                     )
+              VALUES (sol_id_l, ppo_no_in, pp_acct_num_l, pen_account_no_l,
+                      pen_name_l, NULL, NULL, addr_1_l,
+                      pp_category_l, pp_type_l, bp_start_date_l, date_ret_l,
+                      date_death_l, NULL, pen_pan_no_l,
+                      NULL, 'SYSTEM', sol_date_l,
+                      'N', 'N', tr_code_l, pensioner_dob_l,
+                      'N', 'N', type_code_l,
+                      pen_phone_l, gender_l, pao_name_l, 'N',
+                      NULL, 'N',
+                      'N', addr_2_l, addr_3_l, da_eff_from_date_l,
+                      title_l, NULL, pen_pin_l, permanentstate_l,
+                      NULL, pen_email_l, NULL,
+                      net_qual_service_l, NULL, pay_commission_l,
+                      NULL, NULL, NULL,
+                      NULL, NULL, NULL,
+                      ais_code_l, NULL,
+                                       -- 'N',-- UPTO_ENFP_L,
+                                       pen_adhaar_no_l,
+                      comm_amt_l, comm_issue_date_l, pao_name_l,
+                      pao_add1_l, pao_city_l, pao_pin_l, diary_no_l,
+                      ssa_no_l,
+                               -- PEN_PIN_l,
+                               --NET_QUAL_SERVICE_l,
+                               last_pay_drawn_l, grade_pay_l,
+                      npa_l, death_in_harness_flag_l
+                     );
+
+         COMMIT;*/
+         INSERT INTO gbm_pp_master
+                     (sol_id, ppo_num, pp_acct_num, opr_acct_num,
+                      first_name, middle_name, last_name, address,
+                      pp_category, pp_type, pp_start_date, retire_date,
+                      dod, death_cert_received_date, pan_no,
+                      conversion_date, created_by, created_date,
+                      verified_status, is_deleted, tr_code, dob,
+                      is_ex_gratia, overrides_trsy, type_code,
+                      --ph_number,
+                      mobile_number, gender, ppo_received_from, is_migrated,
+                      last_pension_payment_date, master_details_flag,
+                      non_cbs, address2, address3, last_da_eff_from_date,
+                      title_code, district, pincode,
+                      state_code, nationality, email_id, date_of_joining,
+                      net_qualifying_service, pay_scale, pay_commission,
+                      major_head_acct, minor_head, voted_charged,
+                      arrear_rate1, arrear_frm1, arrear_to1,
+                      ais_service_cadre, cust_id,
+                                                 -- IS_ABSORBTION_PENSION, --ENHANCED_PENSION_TO_DATE,
+                                                 aadhaar_no,
+                      commutation_amt, commutation_issue_date, pao_name,
+                      pao_address1, pao_city, pao_pin, dairy_number,
+                      ssa_number,
+                                 --PINCODE,
+                                 --NET_QUALIFYING_SERVICE,
+                                 last_pay_drawn, grade_pay,
+                      non_practising_allowance, death_harness_flag,
+                      date_of_receipt_link_cell, branch_code,
+                      ssa_print_date, date_of_ppo
+                     )
+              VALUES (sol_id_l, ppo_no_in, pp_acct_num_l, pen_account_no_l,
+                      pen_name_l, NULL, NULL, addr_1_l,
+                      pp_category_l, pp_type_l, bp_start_date_l, date_ret_l,
+                      date_death_l, NULL, pen_pan_no_l,
+                      NULL, 'SYSTEM', sol_date_l,
+                      'N', 'N', tr_code_l, pensioner_dob_l,
+                      'N', 'N', type_code_l,
+                      pen_phone_l, gender_l, pao_name_l, 'N',
+                      NULL, 'N',
+                      'N', addr_2_l, addr_3_l, da_eff_from_date_l,
+                      title_l, permanentdistrict_l, pen_pin_l,
+                      permanentstate_l, nationality_l, pen_email_l, NULL,
+                      net_qual_service_l, payscale_l, pay_commission_l,
+                      NULL, NULL, NULL,
+                      NULL, NULL, NULL,
+                      ais_code_l, NULL,
+                                       -- 'N',-- UPTO_ENFP_L,
+                                       pen_adhaar_no_l,
+                      comm_amt_l, comm_issue_date_l, pao_name_l,
+                      pao_add1_l, pao_city_l, pao_pin_l, diary_no_l,
+                      ssa_no_l,
+                               -- PEN_PIN_l,
+                               --NET_QUAL_SERVICE_l,
+                               last_pay_drawn_l, grade_pay_l,
+                      npa_l, death_in_harness_flag_l,
+                      date_of_receipt_l, bnk_pay_code_l,
+                      date_print_l, date_print_l
+                     );
+      END IF;
+
+      COMMIT;
+      err_msg :=
+         'Error while inserting into GBM_PP_ACC_SCHM_PARAM_TABLE - Superannuation';
+      DBMS_OUTPUT.put_line ('err_msg' || err_msg);
+
+      INSERT INTO gbm_eppo_cvl_errlog
+                  (file_name, ppo_num, table_name, rec_id, sno, field_name,
+                   field_data, field_status, field_remarks, user_id
+                  )
+           VALUES (file_name_in, ppo_no_in, NULL, '2', NULL, NULL,
+                   NULL, 'E', err_msg, 'SYSTEM'
+                  );
+
+      err_msg := 'V';
+
+      INSERT INTO gbm_pp_acc_schm_param_table
+         SELECT pp_acct_num_l, param_name, param_value, is_zero_bal,
+                eff_from_date, eff_to_date, is_active, srl_num, NULL,
+                created_by, created_date, last_mod_by, last_mod_date
+           FROM gbm_pp_trsy_schm_param_table
+          WHERE trsy_code = tr_code_l AND is_active = 'Y';
+
+      COMMIT;
+      err_msg := 'Error while process Sp_Gbm_Pension_Master_Verify';
+      DBMS_OUTPUT.put_line ('err_msg' || err_msg);
+
+      INSERT INTO gbm_unverified_operations
+                  (sol_id, operation_id, operation, sch_code,
+                   verified_status, entered_date, is_tran_financial
+                  )
+           VALUES (sol_id_l, pp_acct_num_l, 'A', '0003',
+                   'N', SYSDATE, 'N'
+                  );
+
+      sp_gbm_pension_master_verify (pp_acct_num_l,
+                                    bp_start_date_l,
+                                    'N',
+                                    user_id_in,
+                                    sol_date_l,
+                                    msg_code_out
+                                   );
+      err_msg := 'Sp_Gbm_Pension_Master_Verify' || msg_code_out;
+
+      IF (msg_code_out = 'NO_ERROR')
+      THEN
+         msg_code_out := 'SUCCESS';
+      END IF;
+
+      INSERT INTO gbm_eppo_cvl_errlog
+                  (file_name, ppo_num, table_name, rec_id, sno, field_name,
+                   field_data, field_status, field_remarks, user_id
+                  )
+           VALUES (file_name_in, ppo_no_in, NULL, '5', NULL, NULL,
+                   NULL, 'E', err_msg, 'SYSTEM'
+                  );
+
+      --CODE ADDED BY AJAY 16072018 STARTS HERE
+      IF (msg_code_out = 'SUCCESS')
+      THEN
+         err_msg := 'Failed to process SP_GBM_EPPO_DEF_COMP_VERIFY';
+         DBMS_OUTPUT.put_line ('err_msg' || err_msg);
+         sp_gbm_eppo_cvl_comp_verify (file_name_in,
+                                      ppo_no_in,
+                                      user_id_in,
+                                      msg_code_out
+                                     );
+         DBMS_OUTPUT.put_line ('Component Verify' || msg_code_out);
+
+         INSERT INTO gbm_eppo_cvl_errlog
+                     (file_name, ppo_num, table_name, rec_id, sno,
+                      field_name, field_data, field_status, field_remarks,
+                      user_id
+                     )
+              VALUES (file_name_in, ppo_no_in, NULL, '10', NULL,
+                      NULL, msg_code_out, 'E', err_msg,
+                      'SYSTEM'
+                     );
+
+         err_msg := 'V';
+      END IF;
+
+      IF (msg_code_out = 'SUCCESS')
+      THEN
+         err_msg := 'Failed to process SP_GBM_EPPO_DEF_COMGRA_VER';
+         DBMS_OUTPUT.put_line ('err_msg' || err_msg);
+         sp_gbm_eppo_cvl_comgra_ver (file_name_in,
+                                     ppo_no_in,
+                                     user_id_in,
+                                     msg_code_out
+                                    );
+         DBMS_OUTPUT.put_line ('SP_GBM_PP_EPPO_DEF_COMGRA_VER' || msg_code_out);
+
+         INSERT INTO gbm_eppo_cvl_errlog
+                     (file_name, ppo_num, table_name, rec_id, sno,
+                      field_name, field_data, field_status, field_remarks,
+                      user_id
+                     )
+              VALUES (file_name_in, ppo_no_in, NULL, '11', NULL,
+                      NULL, msg_code_out, 'E', err_msg,
+                      'SYSTEM'
+                     );
+
+         err_msg := 'V';
+      END IF;
+
+      --CODE ENDS BY AJAY
+      --CODE ADDED BY AJAY ON 31-07-2018 FOR FAMILY DETAILS
+--      SELECT COUNT (*)
+--        INTO fm_cnt_l
+--        FROM gbm_eppo_cvl_bklet_fm_details
+--       WHERE file_name = file_name_in;
+
+      --      IF (msg_code_out = 'SUCCESS' AND fm_cnt_l > 0)
+      IF (msg_code_out = 'SUCCESS')
+      THEN
+         err_msg := 'Failed to process SP_GBM_EPPO_CVL_FAM_VERIFY';
+         DBMS_OUTPUT.put_line ('err_msg' || err_msg);
+         sp_gbm_eppo_cvl_fam_verify (file_name_in,
+                                     ppo_no_in,
+                                     pp_acct_num_l,
+                                     sol_id_l,
+                                     user_id_in,
+                                     msg_code_out
+                                    );
+         DBMS_OUTPUT.put_line ('SP_GBM_EPPO_CVL_FAM_VERIFY' || msg_code_out);
+
+         INSERT INTO gbm_eppo_cvl_errlog
+                     (file_name, ppo_num, table_name, rec_id, sno,
+                      field_name, field_data, field_status, field_remarks,
+                      user_id
+                     )
+              VALUES (file_name_in, ppo_no_in, NULL, '11', NULL,
+                      NULL, msg_code_out, 'E', err_msg,
+                      'SYSTEM'
+                     );
+
+         err_msg := 'V';
+      END IF;
+   --CODE ENDS HERE FOR FAMILY DETAILS
+   ELSE
+      err_msg := 'Error while inserting into GBM_PP_MASTER - Family';
+
+      INSERT INTO gbm_eppo_cvl_errlog
+                  (file_name, ppo_num, table_name, rec_id, sno, field_name,
+                   field_data, field_status, field_remarks, user_id
+                  )
+           VALUES (file_name_in, ppo_no_in, NULL, '1', NULL, NULL,
+                   NULL, 'E', err_msg, 'SYSTEM'
+                  );
+
+      COMMIT;
+      err_msg := 'V';
+      
+    IF date_ret_l IS NULL
+      THEN
+         date_ret_l := date_death_l;
+      END IF;
+      
+
+      INSERT INTO gbm_pp_master
+                  (sol_id, ppo_num, pp_acct_num, opr_acct_num,
+                   first_name, middle_name, last_name, address, pp_category,
+                   pp_type, pp_start_date, retire_date, dod,
+                   death_cert_received_date, pan_no, conversion_date,
+                   created_by, created_date, verified_status, is_deleted,
+                   tr_code, dob, is_ex_gratia, overrides_trsy,
+                   type_code,
+                             --PH_NUMBER,
+                             mobile_number, gender, ppo_received_from,
+                   is_migrated, last_pension_payment_date,
+                   master_details_flag, non_cbs, address2, address3,
+                   last_da_eff_from_date, title_code, district,
+                   pincode, state_code, nationality, email_id,
+                   date_of_joining, net_qualifying_service, pay_scale,
+                   pay_commission, major_head_acct, minor_head,
+                   voted_charged, arrear_rate1, arrear_frm1, arrear_to1,
+                   ais_service_cadre, cust_id,
+                                              --IS_ABSORBTION_PENSION, ENHANCED_PENSION_TO_DATE,
+                                              aadhaar_no, pao_name,
+                   pao_address1, pao_city, pao_pin, dairy_number, ssa_number,
+                   --PINCODE,
+                   --NET_QUALIFYING_SERVICE,
+                   last_pay_drawn, grade_pay, non_practising_allowance,
+                   death_harness_flag, date_of_receipt_link_cell,
+                   branch_code, ssa_print_date, date_of_ppo
+                  )
+           VALUES (sol_id_l, ppo_no_in, pp_acct_num_l, pen_account_no_l,
+                   pen_name_l, NULL, NULL, addr_1_l, pp_category_l,
+                   --pp_type_l, frm_orfp_l, date_ret_l, date_death_l,
+                   pp_type_l, date_ret_l + 1, date_ret_l, date_death_l,
+                   NULL, pen_pan_no_l, NULL,                      -- CONV_DATE
+                   'SYSTEM', sol_date_l, 'N', 'N',
+                   tr_code_l, pensioner_dob_l, 'N', death_in_harness_flag_l,
+                   type_code_l, pen_phone_l, gender_l, pao_name_l,
+                   'N', NULL,
+                   'N', 'N', addr_2_l, addr_3_l,
+                   da_eff_from_date_l, title_l, permanentdistrict_l,
+                   pen_pin_l, permanentstate_l, nationality_l, pen_email_l,
+                   joiningdate_l, net_qual_service_l, payscale_l,
+                   pay_commission_l, submajorhead_l, minorhead_l,
+                   votedcharged_l, arrears_l, arrear_from_l, arrear_to_l,
+                   ais_code_l, NULL,
+                                    --'N', UPTO_ENFP_L,
+                                    pen_adhaar_no_l, pao_name_l,
+                   pao_add1_l, pao_city_l, pao_pin_l, diary_no_l, ssa_no_l,
+                   -- PEN_PIN_l,
+                   --NET_QUAL_SERVICE_l,
+                   last_pay_drawn_l, grade_pay_l, npa_l,
+                   death_in_harness_flag_l, date_of_receipt_l,
+                   bnk_pay_code_l, date_print_l, date_print_l
+                  );
+
+      COMMIT;
+      err_msg :=
+         'Error while inserting into GBM_PP_ACC_SCHM_PARAM_TABLE - Superannuation';
+      DBMS_OUTPUT.put_line ('err_msg' || err_msg);
+
+      INSERT INTO gbm_eppo_cvl_errlog
+                  (file_name, ppo_num, table_name, rec_id, sno, field_name,
+                   field_data, field_status, field_remarks, user_id
+                  )
+           VALUES (file_name_in, ppo_no_in, NULL, '2', NULL, NULL,
+                   NULL, 'E', err_msg, 'SYSTEM'
+                  );
+
+      err_msg := 'V';
+
+      INSERT INTO gbm_pp_acc_schm_param_table
+         SELECT pp_acct_num_l, param_name, param_value, is_zero_bal,
+                eff_from_date, eff_to_date, is_active, srl_num, NULL,
+                created_by, created_date, last_mod_by, last_mod_date
+           FROM gbm_pp_trsy_schm_param_table
+          WHERE trsy_code = tr_code_l AND is_active = 'Y';
+
+      COMMIT;
+      err_msg := 'Error while process Sp_Gbm_Pension_Master_Verify';
+      DBMS_OUTPUT.put_line ('err_msg' || err_msg);
+
+      INSERT INTO gbm_unverified_operations
+                  (sol_id, operation_id, operation, sch_code,
+                   verified_status, entered_date, is_tran_financial
+                  )
+           VALUES (sol_id_l, pp_acct_num_l, 'A', '0003',
+                   'N', SYSDATE, 'N'
+                  );
+                  
+               gp_start_date_l :=    date_ret_l + 1;
+
+      sp_gbm_pension_master_verify (pp_acct_num_l,
+                                    gp_start_date_l,
+                                    'N',
+                                    user_id_in,
+                                    sol_date_l,
+                                    msg_code_out
+                                   );
+      err_msg := 'Sp_Gbm_Pension_Master_Verify' || msg_code_out;
+
+      IF (msg_code_out = 'NO_ERROR')
+      THEN
+         msg_code_out := 'SUCCESS';
+      END IF;
+
+      INSERT INTO gbm_eppo_cvl_errlog
+                  (file_name, ppo_num, table_name, rec_id, sno, field_name,
+                   field_data, field_status, field_remarks, user_id
+                  )
+           VALUES (file_name_in, ppo_no_in, NULL, '5', NULL, NULL,
+                   NULL, 'E', err_msg, 'SYSTEM'
+                  );
+
+      DBMS_OUTPUT.put_line ('SUCCESS----------->>>>>>' || msg_code_out);
+
+      IF (msg_code_out = 'SUCCESS')
+      THEN
+         err_msg := 'Failed to process SP_GBM_EPPO_DEF_COMP_VERIFY';
+         DBMS_OUTPUT.put_line ('err_msg' || err_msg);
+         sp_gbm_eppo_cvl_comp_verify (file_name_in,
+                                      ppo_no_in,
+                                      user_id_in,
+                                      msg_code_out
+                                     );
+         DBMS_OUTPUT.put_line ('Component Verify' || msg_code_out);
+
+         INSERT INTO gbm_eppo_cvl_errlog
+                     (file_name, ppo_num, table_name, rec_id, sno,
+                      field_name, field_data, field_status, field_remarks,
+                      user_id
+                     )
+              VALUES (file_name_in, ppo_no_in, NULL, '10', NULL,
+                      NULL, msg_code_out, 'E', err_msg,
+                      'SYSTEM'
+                     );
+
+         err_msg := 'V';
+      END IF;
+
+      IF (msg_code_out = 'SUCCESS')
+      THEN
+         err_msg := 'Failed to process SP_GBM_EPPO_DEF_COMGRA_VER';
+         DBMS_OUTPUT.put_line ('err_msg' || err_msg);
+         sp_gbm_eppo_cvl_comgra_ver (file_name_in,
+                                     ppo_no_in,
+                                     user_id_in,
+                                     msg_code_out
+                                    );
+         DBMS_OUTPUT.put_line ('SP_GBM_PP_EPPO_DEF_COMGRA_VER' || msg_code_out);
+
+         INSERT INTO gbm_eppo_cvl_errlog
+                     (file_name, ppo_num, table_name, rec_id, sno,
+                      field_name, field_data, field_status, field_remarks,
+                      user_id
+                     )
+              VALUES (file_name_in, ppo_no_in, NULL, '11', NULL,
+                      NULL, msg_code_out, 'E', err_msg,
+                      'SYSTEM'
+                     );
+
+         err_msg := 'V';
+      END IF;
+
+      --CODE ADDED BY AJAY ON 31-07-2018 FOR FAMILY DETAILS
+      IF (msg_code_out = 'SUCCESS')
+      THEN
+         err_msg := 'Failed to process SP_GBM_EPPO_CVL_FAM_VERIFY';
+         DBMS_OUTPUT.put_line ('err_msg' || err_msg);
+         sp_gbm_eppo_cvl_fam_verify (file_name_in,
+                                     ppo_no_in,
+                                     pp_acct_num_l,
+                                     sol_id_l,
+                                     user_id_in,
+                                     msg_code_out
+                                    );
+         DBMS_OUTPUT.put_line ('SP_GBM_EPPO_CVL_FAM_VERIFY' || msg_code_out);
+
+         INSERT INTO gbm_eppo_cvl_errlog
+                     (file_name, ppo_num, table_name, rec_id, sno,
+                      field_name, field_data, field_status, field_remarks,
+                      user_id
+                     )
+              VALUES (file_name_in, ppo_no_in, NULL, '11', NULL,
+                      NULL, msg_code_out, 'E', err_msg,
+                      'SYSTEM'
+                     );
+
+         err_msg := 'V';
+      END IF;
+   --CODE ENDS HERE FOR FAMILY DETAILS
+   END IF;
+
+   SELECT COUNT (*)
+     INTO pen_mst_cnt_l
+     FROM gbm_pp_master
+    WHERE ppo_num = ppo_no_in;
+
+   IF (pen_mst_cnt_l > 0)
+   THEN
+      IF (msg_code_out <> 'SUCCESS')
+      THEN
+         msg_code_out := 'SUCCESS';
+      END IF;
+   END IF;
+
+   IF (msg_code_out = 'SUCCESS')
+   THEN
+      UPDATE gbm_eppo_cvl_details
+         SET process_status = 'S',
+             is_verified = 'Y'
+       WHERE file_name = file_name_in
+         AND ppo_num = ppo_no_in
+         --AND UPLOAD_DATE = SOL_DATE_L
+         AND is_deleted = 'N';
+
+/*
+      IF (pay_mat_ind IS NOT NULL AND pay_mat_lev IS NOT NULL)
+      THEN
+         UPDATE gpm
+            SET pay_matrix_index = pay_mat_ind,
+                pay_matrix_level = pay_mat_lev
+          WHERE ppo_num = ppo_no_in;
+      END IF;
+*/
+      IF (pay_matrix_l IS NOT NULL)
+      THEN
+         UPDATE gpm
+            SET pay_scale = pay_matrix_l
+          WHERE ppo_num = ppo_no_in;
+      END IF;
+
+      --added by ashish on 270720
+      IF (pao_code_l IS NOT NULL)
+      THEN
+         UPDATE gpm
+            SET pao_code = pao_code_l
+          WHERE ppo_num = ppo_no_in;
+      END IF;
+
+      IF (title_l IS NOT NULL)
+      THEN
+         --title_tmp := title_l;
+         title_len := LENGTH (title_l);
+
+         IF (title_len = 2)
+         THEN
+            SELECT sub_code
+              INTO title_tmp
+              FROM gbm_sub_code_master
+             WHERE sub_code_desc LIKE 'Mr.' AND code = '056';
+         ELSE
+            IF (title_l LIKE '%SHRI%' OR title_l LIKE '%Shri%')
+            THEN
+               title_l := 'Mr.';
+            ELSIF (title_l LIKE '%SMT%' OR title_l LIKE '%Smt%')
+            THEN
+               title_l := 'Mrs';
+            END IF;
+
+            SELECT sub_code
+              INTO title_tmp
+              FROM gbm_sub_code_master
+             WHERE sub_code_desc LIKE '%' || title_l || '%' AND code = '056';
+         END IF;
+
+         UPDATE gpm
+            SET title_code = title_tmp
+          WHERE ppo_num = ppo_no_in;
+      ELSE
+         title_l := SUBSTR (pen_name_l, 1, (INSTR (pen_name_l, '.') - 1));
+         title_len := LENGTH (title_l);
+
+         IF (title_len = 2)
+         THEN
+            SELECT sub_code
+              INTO title_tmp
+              FROM gbm_sub_code_master
+             WHERE sub_code_desc LIKE 'Mr.' AND code = '056';
+         ELSE
+            IF (title_l LIKE '%SHRI%' OR title_l LIKE '%Shri%')
+            THEN
+               title_l := 'Mr.';
+            ELSIF (title_l LIKE '%SMT%' OR title_l LIKE '%Smt%')
+            THEN
+               title_l := 'Mrs';
+            END IF;
+			
+			IF title_l IS NULL
+            THEN 
+             title_l := 'Mrs';
+            END IF;
+			
+			  SELECT sub_code
+              INTO title_tmp
+              FROM gbm_sub_code_master
+             WHERE sub_code_desc LIKE '%' || title_l || '%' AND code = '056';
+         END IF;
+
+         UPDATE gpm
+            SET title_code = title_tmp
+          WHERE ppo_num = ppo_no_in;
+      END IF;
+
+      IF ((pen_name_l LIKE 'M%' OR pen_name_l LIKE 'S%'))
+      THEN
+         UPDATE gpm
+            SET first_name =
+                        TRIM (SUBSTR (pen_name_l, INSTR (pen_name_l, '.') + 1))
+          WHERE ppo_num = ppo_no_in;
+      END IF;
+
+      UPDATE gbm_eppo_cvl_master
+         SET upload_status = 'S'
+       WHERE file_name = file_name_in
+                                     --AND UPLOAD_DATE = SOL_DATE_L
+             AND is_deleted = 'N';
+
+      INSERT INTO gbm_eppo_cvl_history
+         SELECT *
+           FROM gbm_eppo_cvl_details
+          WHERE file_name = file_name_in
+            AND ppo_num = ppo_no_in
+            --AND UPLOAD_DATE = SOL_DATE_L
+            AND is_deleted = 'N';
+
+      DELETE FROM gbm_eppo_cvl_details
+            WHERE file_name = file_name_in
+              AND ppo_num = ppo_no_in
+              --AND UPLOAD_DATE = SOL_DATE_L
+              AND is_deleted = 'N';
+
+      COMMIT;
+   END IF;
+
+   message_code_out := 'SUCCESS';
+EXCEPTION
+   WHEN NO_DATA_FOUND
+   THEN
+      message_code_out := 'M1007005';
+   WHEN TOO_MANY_ROWS
+   THEN
+      DBMS_OUTPUT.put_line ('Exception Too Many Rows - ');
+   WHEN DUP_VAL_ON_INDEX
+   THEN
+      DBMS_OUTPUT.put_line ('dup_val_on_index - ');
+      message_code_out := 'duplicate value';
+   WHEN INVALID_CURSOR
+   THEN
+      DBMS_OUTPUT.put_line ('invalid_cursor  ');
+   WHEN INVALID_NUMBER
+   THEN
+      DBMS_OUTPUT.put_line ('invalid_number - ');
+   WHEN ACCESS_INTO_NULL
+   THEN
+      DBMS_OUTPUT.put_line ('ACCESS_INTO_NULL - ');
+   WHEN OTHERS
+   THEN
+      err_msg := err_msg || SQLERRM;
+      message_code_out := 'FAILURE';
+      DBMS_OUTPUT.put_line ('Error ' || SQLERRM);
+      --RESULT_OUT := 0;
+      DBMS_OUTPUT.put_line ('No Records Found');
+      ROLLBACK;
+--WHEN ROLLBACKEXCEPTION
+--THEN
+-- MESSAGE_CODE_OUT := 'M1007065';
+--RESULT_OUT := 0;
+--DBMS_OUTPUT.PUT_LINE ('ROLLBACK EXCEPTION-M1007065');
+--ROLLBACK;
+/* WHEN OTHERS
+THEN
+    MESSAGE_CODE_OUT := ERR_MSG;
+    --  MESSAGE_CODE_OUT := 'M1007065';--'TABLE UPDATEION FAILED';
+    --RESULT_OUT := 0;
+    DBMS_OUTPUT.PUT_LINE ('TABLE INSERTION FAILED');
+    ROLLBACK;*/
+END;
+/

@@ -1,0 +1,6 @@
+SPOOL CVL_EPPO_UPDATE.LST
+
+update gbm_eppo_cvl_errlog  set FIELD_STATUS='S',FIELD_REMARKS='Successfully'
+where file_name = 'N1247458-20210115.xml' AND FIELD_STATUS='E';
+
+COMMIT;

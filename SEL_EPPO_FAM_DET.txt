@@ -1,0 +1,13 @@
+SET lines 2000;
+SET pages 0;
+SET COLSEP '|';
+
+SPOOL SEL_EPPO_FAM_DET.lst;
+
+SELECT *
+FROM gbm_eppo_cvl_bklet_fm_details WHERE file_name = 'N1246014-20210106.xml';
+
+SELECT *
+FROM gbm_eppo_cvl_booklet_details WHERE file_name = 'N1246014-20210106.xml';
+
+SPOOL OFF;
